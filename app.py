@@ -23,7 +23,7 @@ with tab1:
         st.subheader("1️⃣ 尺寸參數")
         dw_total_length = st.number_input("連續壁總長度 (L) [m]", min_value=0.0, value=120.0, step=1.0)
         
-        # --- 修改處：單位改為 cm，步進值改為 10 ---
+        # 單位維持公分 (cm)
         dw_width_cm = st.number_input("連續壁厚度 (W) [cm]", min_value=50.0, value=80.0, step=10.0, help="常見規格：60, 70, 80, 100, 120 cm")
         
         dw_depth = st.number_input("施作深度 (D) [m]", min_value=0.0, value=30.0, step=1.0)
@@ -31,7 +31,10 @@ with tab1:
 
         st.markdown("---")
         st.subheader("2️⃣ 排程參數")
-        unit_std_len = st.number_input("標準單元長度 [m]", min_value=2.0, max_value=8.0, value=6.0, step=0.5)
+        
+        # --- 修改處：預設值改為 4.5 ---
+        unit_std_len = st.number_input("標準單元長度 [m]", min_value=2.0, max_value=10.0, value=4.5, step=0.5, help="預設 4.5m，可依公母單元平均長度調整")
+        
         days_per_unit = st.number_input("單單元循環天數 (天/單元)", min_value=0.5, value=3.0, step=0.5)
         machine_sets = st.number_input("施作機具組數 (組)", min_value=1, value=1, help="現場同時作業的 MHL/抓斗組數")
 
@@ -48,14 +51,14 @@ with tab1:
             dw_area = dw_total_length * dw_depth
 
             # 3. 單元數與工期
+            # 使用 math.ceil 確保無條件進位
             total_units = math.ceil(dw_total_length / unit_std_len)
             total_days = (total_units * days_per_unit) / machine_sets
 
             # --- 顯示結果 ---
             st.subheader("📊 規劃結果概覽")
             
-            # 顯示實際計算用的厚度 (m)
-            st.caption(f"計算基礎：厚度 {dw_width_cm} cm (即 {dw_width_m} m)")
+            st.caption(f"計算基礎：厚度 {dw_width_cm} cm (即 {dw_width_m} m) | 單元標準長 {unit_std_len} m")
 
             # 第一排：工程數量
             st.markdown("##### 📦 工程數量")
@@ -69,7 +72,7 @@ with tab1:
             # 第二排：排程與單元
             st.markdown("##### 🗓️ 進度排程")
             t1, t2, t3 = st.columns(3)
-            t1.metric("預計總單元數", f"{total_units} 單元", help=f"以 {unit_std_len}m 為標準")
+            t1.metric("預計總單元數", f"{total_units} 單元", help=f"總長度 / {unit_std_len}m (無條件進位)")
             t2.metric("預估施作工期", f"{total_days:.1f} 天", help=f"配置 {machine_sets} 組機具")
             t3.metric("平均每日進度", f"{total_units/total_days:.2f} 單元/天")
 
