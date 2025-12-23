@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import math  # 用於無條件進位計算
+import math
 
 # 設定網頁標題與圖示
 st.set_page_config(page_title="工程計算工具箱", page_icon="🏗️", layout="wide")
@@ -9,85 +9,164 @@ st.title("🏗️ 工程計算工具箱")
 st.markdown("---")
 
 # 建立兩個分頁
-tab1, tab2 = st.tabs(["🧱 連續壁規劃", "💧 沉沙池計算"])
+tab1, tab2 = st.tabs(["🧱 連續壁規劃 (含特殊工法)", "💧 沉沙池計算"])
 
 # ==========================================
-# 分頁 1: 連續壁規劃 (含工期與內外皮計算)
+# 分頁 1: 連續壁規劃
 # ==========================================
 with tab1:
-    st.header("連續壁工程量與工期試算")
+    st.header("連續壁工程量與工法規劃")
     
     col1, col2 = st.columns([1, 2])
     
     with col1:
         st.subheader("1️⃣ 尺寸參數")
-        dw_total_length = st.number_input("連續壁「中心線」總長 (L) [m]", min_value=0.0, value=120.0, step=1.0, help="請輸入連續壁中心線的總長度")
         
+        # --- 輸入模式切換 ---
+        input_mode = st.radio(
+            "長度輸入模式",
+            ["由中心線自動推算 (搭配轉角)", "自行輸入內/外/中心長度"],
+            horizontal=True
+        )
+        
+        # 共同參數：厚度
         dw_width_cm = st.number_input("連續壁厚度 (W) [cm]", min_value=50.0, value=80.0, step=10.0)
-        
-        # 新增：轉角數量設定
-        corners = st.number_input("90度轉角數量 (個)", min_value=0, value=4, step=1, help="矩形基地通常為4個角，若為直線則設為0")
-        
-        dw_depth = st.number_input("施作深度 (D) [m]", min_value=0.0, value=30.0, step=1.0)
+        dw_width_m = dw_width_cm / 100.0
+
+        # --- 根據模式顯示不同輸入框 ---
+        if input_mode == "由中心線自動推算 (搭配轉角)":
+            dw_center_len = st.number_input("中心線總長 (L) [m]", min_value=0.0, value=120.0, step=1.0)
+            corners = st.number_input("90度轉角數量 (個)", min_value=0, value=4, step=1)
+            len_outer = dw_center_len + (corners * dw_width_m)
+            len_inner = dw_center_len - (corners * dw_width_m)
+        else:
+            dw_center_len = st.number_input("中心線長度 [m]", min_value=0.0, value=120.0)
+            len_outer = st.number_input("外皮線長度 [m]", min_value=0.0, value=123.2)
+            len_inner = st.number_input("內皮線長度 [m]", min_value=0.0, value=116.8)
+            corners = 0
+
+        dw_depth = st.number_input("連續壁施作深度 (D) [m]", min_value=0.0, value=30.0, step=1.0)
         loss_rate = st.slider("混凝土損耗率 (%)", min_value=0, max_value=30, value=10)
 
         st.markdown("---")
-        st.subheader("2️⃣ 排程參數")
+        st.subheader("2️⃣ 施工工法選擇")
+        
+        # --- 新增：工法選擇選單 ---
+        construction_method = st.selectbox(
+            "導溝/障礙排除工法",
+            ["一般導溝工法 (Standard)", "深導溝工法 (Deep Guide Wall)", "全套管障礙排除 (All-Casing)"],
+            help="針對都更案舊基礎或特殊地質選擇對應工法"
+        )
+
+        # --- 根據工法跳出動態欄位 ---
+        special_items = {}  # 用來儲存特殊項目的字典
+        
+        if construction_method == "一般導溝工法 (Standard)":
+            st.caption("✅ 適用於素地或無淺層障礙物之基地。")
+            guide_depth = 1.5  # 預設一般導溝深
+
+        elif construction_method == "深導溝工法 (Deep Guide Wall)":
+            st.warning("⚠️ 適用於淺層土質軟弱或有淺層舊構造物。")
+            guide_depth = st.number_input("深導溝施作深度 [m]", min_value=1.5, value=3.0, step=0.5)
+            # 儲存特殊數據
+            special_items['深導溝開挖'] = guide_depth
+
+        elif construction_method == "全套管障礙排除 (All-Casing)":
+            st.error("🛑 適用於排除深層舊基礎、鋼筋混凝土障礙或舊基樁。")
+            st.markdown("#### 全套管與地改參數")
+            casing_dia = st.selectbox("使用套管尺寸", ["1000mm", "1200mm", "1500mm"], index=1)
+            obstacle_depth = st.number_input("預估障礙物/切削深度 [m]", min_value=0.0, value=10.0, step=1.0)
+            
+            # 地改與微型樁
+            soil_imp_area = st.number_input("地盤改良面積 (m²)", min_value=0.0, value=0.0, help="例如導溝兩側改良")
+            micro_pile_count = st.number_input("微型樁支數 (支)", min_value=0, value=0, help="用於保護鄰房或導溝穩定")
+            micro_pile_len = st.number_input("微型樁單支長度 (m)", min_value=0.0, value=0.0)
+            
+            guide_depth = 1.5 # 全套管通常配合一般導溝或臨時導溝，這裡暫設 1.5
+            
+            # 儲存特殊數據
+            special_items['套管尺寸'] = casing_dia
+            special_items['障礙切削深'] = obstacle_depth
+            special_items['地改面積'] = soil_imp_area
+            special_items['微型樁'] = (micro_pile_count, micro_pile_len)
+
+        st.markdown("---")
+        st.subheader("3️⃣ 排程參數")
+        # 根據工法調整預設天數 (全套管比較慢)
+        default_days = 5.0 if construction_method == "全套管障礙排除 (All-Casing)" else 3.0
+        
         unit_std_len = st.number_input("標準單元長度 [m]", min_value=2.0, max_value=10.0, value=4.5, step=0.5)
-        days_per_unit = st.number_input("單單元循環天數 (天/單元)", min_value=0.5, value=3.0, step=0.5)
+        days_per_unit = st.number_input("單單元循環天數 (天/單元)", min_value=0.5, value=default_days, step=0.5, help="全套管工法通常需較長作業時間")
         machine_sets = st.number_input("施作機具組數 (組)", min_value=1, value=1)
 
     with col2:
-        if dw_total_length > 0 and dw_width_cm > 0:
-            # --- 計算邏輯 ---
-            
-            # 1. 單位換算：將 cm 轉為 m
-            dw_width_m = dw_width_cm / 100.0
-            
-            # 2. 內外皮長度計算
-            # 公式：外長 = 中心長 + (N * 厚度), 內長 = 中心長 - (N * 厚度)
-            len_outer = dw_total_length + (corners * dw_width_m)
-            len_inner = dw_total_length - (corners * dw_width_m)
-
-            # 3. 體積與面積計算 (通常體積計算是以中心線為準)
-            dw_vol = dw_total_length * dw_width_m * dw_depth
+        if dw_center_len > 0 and dw_width_cm > 0:
+            # --- 主計算邏輯 ---
+            dw_vol = dw_center_len * dw_width_m * dw_depth
             dw_conc = dw_vol * (1 + loss_rate / 100)
-            dw_area = dw_total_length * dw_depth
-
-            # 4. 單元數與工期
-            total_units = math.ceil(dw_total_length / unit_std_len)
+            dw_area = dw_center_len * dw_depth
+            total_units = math.ceil(dw_center_len / unit_std_len)
             total_days = (total_units * days_per_unit) / machine_sets
 
             # --- 顯示結果 ---
-            
-            # 新增：幾何尺寸顯示區塊
-            st.subheader("📏 幾何尺寸換算")
-            st.info(f"依據中心線長度 **{dw_total_length}m** 與 **{corners}** 個轉角計算：")
-            
+            st.subheader("📏 幾何尺寸確認")
+            if input_mode == "自行輸入內/外/中心長度":
+                st.caption("依據手動輸入數值：")
+            else:
+                st.caption(f"依據中心線 {dw_center_len}m 推算：")
+
             g1, g2, g3 = st.columns(3)
-            g1.metric("外皮線長度", f"{len_outer:.2f} m", help="用於外側導溝或外側模板計算")
-            g2.metric("中心線長度", f"{dw_total_length:.2f} m", "基準輸入")
-            g3.metric("內皮線長度", f"{len_inner:.2f} m", help="用於開挖面或內側模板計算")
+            g1.metric("外皮線長度", f"{len_outer:.2f} m")
+            g2.metric("中心線長度", f"{dw_center_len:.2f} m")
+            g3.metric("內皮線長度", f"{len_inner:.2f} m")
 
             st.markdown("---")
 
-            # 第一排：工程數量
-            st.subheader("📊 規劃結果概覽")
-            st.caption(f"計算基礎：厚度 {dw_width_cm} cm | 單元標準長 {unit_std_len} m")
+            # --- 特殊工法 數量計算區塊 ---
+            st.subheader(f"🏗️ 工法分析：{construction_method}")
+            
+            # 這裡計算假設工程數量
+            if construction_method == "一般導溝工法 (Standard)":
+                st.info("採用標準導溝施作，無特殊假設工程項目。")
+                
+            elif construction_method == "深導溝工法 (Deep Guide Wall)":
+                # 粗估深導溝開挖體積：長度 x (壁厚+預留寬度1m) x 深度
+                dg_width = dw_width_m + 1.0 
+                dg_vol = dw_center_len * dg_width * guide_depth
+                
+                c1, c2 = st.columns(2)
+                c1.metric("深導溝預估開挖量", f"{dg_vol:,.0f} m³", help=f"計算式: L x (W+1m) x {guide_depth}m")
+                c2.metric("深導溝深度", f"{guide_depth} m")
+                st.caption("註：深導溝通常需回填低強度混凝土或構築加深RC導溝。")
 
-            st.markdown("##### 📦 工程數量")
+            elif construction_method == "全套管障礙排除 (All-Casing)":
+                # 計算預估障礙排除體積
+                obs_vol = dw_center_len * dw_width_m * obstacle_depth
+                mp_total_len = special_items['微型樁'][0] * special_items['微型樁'][1]
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("障礙切削預估體積", f"{obs_vol:,.0f} m³", help=f"深度 {obstacle_depth}m 範圍內")
+                c2.metric("地質改良面積", f"{special_items['地改面積']:,.0f} m²")
+                c3.metric("微型樁總長度", f"{mp_total_len:,.0f} m", f"{special_items['微型樁'][0]} 支")
+                
+                st.warning(f"注意：需確認 {special_items['套管尺寸']} 套管與抓斗/切削機具之匹配性。")
+
+            st.markdown("---")
+
+            # --- 主要工程數量 ---
+            st.subheader("📦 連續壁本體工程數量")
             m1, m2, m3 = st.columns(3)
             m1.metric("總挖掘土方", f"{dw_vol:,.0f} m³")
             m2.metric("預估混凝土", f"{dw_conc:,.0f} m³", f"{loss_rate}% 損耗")
-            m3.metric("總壁體面積", f"{dw_area:,.0f} m²", help="垂直投影面積 (中心線 * 深度)")
+            m3.metric("總壁體面積", f"{dw_area:,.0f} m²")
 
             st.markdown("---")
             
-            # 第二排：排程與單元
-            st.markdown("##### 🗓️ 進度排程")
+            # --- 進度排程 ---
+            st.subheader("🗓️ 進度排程預估")
             t1, t2, t3 = st.columns(3)
             t1.metric("預計總單元數", f"{total_units} 單元")
-            t2.metric("預估施作工期", f"{total_days:.1f} 天", help=f"配置 {machine_sets} 組機具")
+            t2.metric("預估施作工期", f"{total_days:.1f} 天", help=f"含 {construction_method} 作業時間")
             t3.metric("平均每日進度", f"{total_units/total_days:.2f} 單元/天")
 
         else:
