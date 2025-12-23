@@ -12,7 +12,7 @@ st.markdown("---")
 tab1, tab2 = st.tabs(["🧱 連續壁規劃", "💧 假設工程：沉沙與棄土"])
 
 # ==========================================
-# 分頁 1: 連續壁規劃 (保持上次的功能)
+# 分頁 1: 連續壁規劃 (保持不變)
 # ==========================================
 with tab1:
     st.header("連續壁工程量與工法規劃")
@@ -122,110 +122,105 @@ with tab1:
             st.warning("👈 請輸入完整參數")
 
 # ==========================================
-# 分頁 2: 假設工程 (沉沙與棄土) - 核心更新
+# 分頁 2: 假設工程 (沉沙與棄土) - 升級版
 # ==========================================
 with tab2:
     st.header("💧 假設工程：沉沙池與棄土坑規劃")
     
-    # 使用 Expander 來整理版面，避免太雜亂
+    # ----------------------------------------------------
+    # 1. 基地與土方總量計算 (Area x Depth)
+    # ----------------------------------------------------
+    st.subheader("1️⃣ 基地與土方總量")
+    col_base1, col_base2, col_base3 = st.columns(3)
     
+    with col_base1:
+        site_area = st.number_input("基地/開挖平面面積 (m²)", min_value=0.0, value=1000.0, step=100.0)
+    with col_base2:
+        # 新增深度欄位
+        avg_depth = st.number_input("平均開挖深度 (m)", min_value=0.0, value=10.0, step=0.5, help="大底或最終開挖深度")
+    with col_base3:
+        # 自動計算總體積
+        total_exc_vol = site_area * avg_depth
+        st.metric("總計畫挖掘實方體積", f"{total_exc_vol:,.0f} m³", help="計算式: 平面面積 x 平均深度")
+
+    st.markdown("---")
+
+    col_left, col_right = st.columns([1, 1])
+
     # ----------------------------------------------------
-    # 區塊 A: 沉沙池規劃 (依據面積推算)
+    # 區塊 A: 沉沙池配置 (依據 面積)
     # ----------------------------------------------------
-    with st.expander("A. 沉沙池配置計算 (依據開挖面積)", expanded=True):
-        col_pool_in, col_pool_out = st.columns([1, 2])
-        
-        with col_pool_in:
-            st.subheader("1. 基地與法規參數")
-            site_area = st.number_input("基地/開挖面積 (m²)", min_value=0.0, value=1000.0, step=100.0)
+    with col_left:
+        with st.expander("A. 沉沙池配置 (依據開挖面積)", expanded=True):
+            st.caption("依據水保法規，滯洪沉沙通常依據「開發面積」計算。")
             
-            # 法規係數輸入
+            # 法規係數
             req_factor = st.number_input(
-                "法規滯洪沉沙量係數 (m³/ha)", 
-                min_value=0.0, value=600.0, step=50.0, 
-                help="常見水保計畫約要求 500~800 m³/ha，請依核定計畫書填寫"
+                "法規係數 (m³/ha)", 
+                min_value=0.0, value=600.0, step=50.0
             )
             
-            st.markdown("---")
-            st.subheader("2. 單一沉沙池規格")
-            pool_l = st.number_input("單池長度 (m)", value=5.0)
-            pool_w = st.number_input("單池寬度 (m)", value=3.0)
-            pool_h = st.number_input("單池有效深 (m)", value=2.0)
+            # 單池規格
+            st.markdown("##### 單池規格")
+            c_p1, c_p2, c_p3 = st.columns(3)
+            pool_l = c_p1.number_input("長 (m)", value=5.0)
+            pool_w = c_p2.number_input("寬 (m)", value=3.0)
+            pool_h = c_p3.number_input("深 (m)", value=2.0)
             
-        with col_pool_out:
-            # 計算邏輯
-            # 1. 總需求容量 (將 m² 換算成 ha: / 10000)
-            total_req_vol = (site_area / 10000.0) * req_factor
-            
-            # 2. 單池容量
+            # 計算
+            total_req_sed_vol = (site_area / 10000.0) * req_factor
             single_pool_vol = pool_l * pool_w * pool_h
             
-            # 3. 所需數量 (無條件進位)
             if single_pool_vol > 0:
-                pools_needed = math.ceil(total_req_vol / single_pool_vol)
+                pools_needed = math.ceil(total_req_sed_vol / single_pool_vol)
                 actual_total_vol = pools_needed * single_pool_vol
             else:
                 pools_needed = 0
                 actual_total_vol = 0
             
-            st.subheader("📊 沉沙池計算結果")
-            
-            m1, m2 = st.columns(2)
-            m1.metric("法規/計畫要求總量", f"{total_req_vol:,.2f} m³", help=f"{site_area/10000} ha × {req_factor}")
-            m2.metric("單池有效容量", f"{single_pool_vol:,.2f} m³")
-            
-            st.success(f"### 👉 建議設置數量： {pools_needed} 座")
-            st.caption(f"提供總容量 {actual_total_vol:.2f} m³ (大於要求之 {total_req_vol:.2f} m³)")
-            
-            # 繪製簡單表格
-            st.dataframe(pd.DataFrame({
-                "項目": ["基地面積", "要求係數", "總需求量", "設計總提供量", "判定"],
-                "數值": [f"{site_area} m²", f"{req_factor} m³/ha", f"{total_req_vol:.2f} m³", f"{actual_total_vol:.2f} m³", "合格" if actual_total_vol >= total_req_vol else "不足"]
-            }), use_container_width=True)
+            st.info(f"""
+            **計算結果**：
+            - 法規要求容量：**{total_req_sed_vol:.2f} m³**
+            - 建議設置數量： **{pools_needed} 座**
+            - 實際提供容量： {actual_total_vol:.2f} m³
+            """)
 
     # ----------------------------------------------------
-    # 區塊 B: 棄土坑規劃 (依據出土量推算)
+    # 區塊 B: 棄土坑與出土 (依據 體積)
     # ----------------------------------------------------
-    with st.expander("B. 棄土坑容量檢核 (依據每日出土平衡)", expanded=False):
-        col_soil_in, col_soil_out = st.columns([1, 2])
-        
-        with col_soil_in:
-            st.subheader("1. 出土參數")
-            daily_solid_vol = st.number_input("每日計畫挖掘實方 (m³/天)", min_value=0.0, value=200.0, step=50.0, help="可參考連續壁每日挖掘量或大底開挖量")
-            swell_factor = st.number_input("土方鬆弛/膨脹係數", min_value=1.0, value=1.25, step=0.05, help="實方挖出來變鬆方，通常 1.25~1.35")
+    with col_right:
+        with st.expander("B. 棄土坑與出土工期 (依據體積)", expanded=True):
+            st.caption("依據總體積與每日出土量，檢核暫存坑與工期。")
             
-            st.subheader("2. 運送參數")
+            daily_solid_vol = st.number_input("每日計畫出土實方 (m³/天)", min_value=1.0, value=200.0, step=50.0)
+            swell_factor = st.number_input("土方鬆弛係數", min_value=1.0, value=1.25, step=0.05)
+            
+            st.markdown("##### 運土與暫存")
             truck_vol = st.number_input("運土車斗容量 (m³/車)", value=10.0)
-            max_trips = st.number_input("每日最大出車次數 (車/天)", value=20, help="受限於交通維持計畫或棄土場收容量")
+            max_trips = st.number_input("每日最大車次 (車/天)", value=20)
             
-        with col_soil_out:
             # 計算邏輯
-            # 1. 每日產出鬆方
+            # 1. 棄土坑檢核
             daily_loose_vol = daily_solid_vol * swell_factor
-            
-            # 2. 每日最大運能
             daily_haul_cap = truck_vol * max_trips
-            
-            # 3. 滯留土方 (棄土坑需求)
             buffer_needed = daily_loose_vol - daily_haul_cap
-            if buffer_needed < 0: buffer_needed = 0 # 運能充足，無需棄土坑(理論上)
+            if buffer_needed < 0: buffer_needed = 0
             
-            st.subheader("📊 棄土坑計算結果")
+            # 2. 開挖工期推算 (總體積 / 每日量)
+            excavation_days = math.ceil(total_exc_vol / daily_solid_vol) if daily_solid_vol > 0 else 0
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("每日產出鬆方", f"{daily_loose_vol:,.1f} m³", f"實方 {daily_solid_vol}")
-            c2.metric("每日最大運能", f"{daily_haul_cap:,.1f} m³", f"{max_trips} 車次")
-            
+            st.markdown("---")
             # 顯示結果
+            c_r1, c_r2 = st.columns(2)
+            c_r1.metric("1. 需暫存棄土量", f"{buffer_needed:,.1f} m³", "若為0則運能充足", delta_color="inverse")
+            c_r2.metric("2. 預估開挖天數", f"{excavation_days} 天", f"總量 {total_exc_vol:,.0f} m³")
+            
             if buffer_needed > 0:
-                c3.metric("需暫存棄土量", f"{buffer_needed:,.1f} m³", "運能不足，需坑暫存", delta_color="inverse")
-                st.error(f"⚠️ **運能不足！** 每日有 **{buffer_needed:.1f} m³** 土方無法運離。")
-                st.markdown(f"**建議棄土坑規格** (假設深 2m): 面積約需 **{buffer_needed/2:.1f} m²**")
+                st.error(f"每日尚有 {buffer_needed:.1f} m³ 鬆方需暫存，請設置棄土坑。")
             else:
-                c3.metric("需暫存棄土量", "0 m³", "運能充足", delta_color="normal")
-                st.success("✅ **運能充足！** 現有車次足以清運每日產出土方，僅需設置臨時轉運區即可。")
+                st.success("運能充足，無需大型棄土坑。")
 
-    st.info("💡 棄土坑大小通常受限於基地空間，若計算需求過大，建議增加出車車次或減少每日開挖量。")
+    st.info("💡 說明：沉沙池主要依據「面積」計算降雨逕流；棄土坑與工期則依據「體積」計算。")
 
 st.markdown("---")
 st.caption("Designed for Civil Engineering Plans | Built with Streamlit")
