@@ -12,7 +12,7 @@ st.markdown("---")
 tab1, tab2 = st.tabs(["🧱 連續壁規劃", "💧 沉沙池計算"])
 
 # ==========================================
-# 分頁 1: 連續壁規劃 (含工期)
+# 分頁 1: 連續壁規劃 (含工期與內外皮計算)
 # ==========================================
 with tab1:
     st.header("連續壁工程量與工期試算")
@@ -21,58 +21,72 @@ with tab1:
     
     with col1:
         st.subheader("1️⃣ 尺寸參數")
-        dw_total_length = st.number_input("連續壁總長度 (L) [m]", min_value=0.0, value=120.0, step=1.0)
+        dw_total_length = st.number_input("連續壁「中心線」總長 (L) [m]", min_value=0.0, value=120.0, step=1.0, help="請輸入連續壁中心線的總長度")
         
-        # 單位維持公分 (cm)
-        dw_width_cm = st.number_input("連續壁厚度 (W) [cm]", min_value=50.0, value=80.0, step=10.0, help="常見規格：60, 70, 80, 100, 120 cm")
+        dw_width_cm = st.number_input("連續壁厚度 (W) [cm]", min_value=50.0, value=80.0, step=10.0)
+        
+        # 新增：轉角數量設定
+        corners = st.number_input("90度轉角數量 (個)", min_value=0, value=4, step=1, help="矩形基地通常為4個角，若為直線則設為0")
         
         dw_depth = st.number_input("施作深度 (D) [m]", min_value=0.0, value=30.0, step=1.0)
         loss_rate = st.slider("混凝土損耗率 (%)", min_value=0, max_value=30, value=10)
 
         st.markdown("---")
         st.subheader("2️⃣ 排程參數")
-        
-        # --- 修改處：預設值改為 4.5 ---
-        unit_std_len = st.number_input("標準單元長度 [m]", min_value=2.0, max_value=10.0, value=4.5, step=0.5, help="預設 4.5m，可依公母單元平均長度調整")
-        
+        unit_std_len = st.number_input("標準單元長度 [m]", min_value=2.0, max_value=10.0, value=4.5, step=0.5)
         days_per_unit = st.number_input("單單元循環天數 (天/單元)", min_value=0.5, value=3.0, step=0.5)
-        machine_sets = st.number_input("施作機具組數 (組)", min_value=1, value=1, help="現場同時作業的 MHL/抓斗組數")
+        machine_sets = st.number_input("施作機具組數 (組)", min_value=1, value=1)
 
     with col2:
         if dw_total_length > 0 and dw_width_cm > 0:
             # --- 計算邏輯 ---
             
-            # 1. 單位換算：將 cm 轉為 m 進行體積計算
+            # 1. 單位換算：將 cm 轉為 m
             dw_width_m = dw_width_cm / 100.0
             
-            # 2. 體積計算
+            # 2. 內外皮長度計算
+            # 公式：外長 = 中心長 + (N * 厚度), 內長 = 中心長 - (N * 厚度)
+            len_outer = dw_total_length + (corners * dw_width_m)
+            len_inner = dw_total_length - (corners * dw_width_m)
+
+            # 3. 體積與面積計算 (通常體積計算是以中心線為準)
             dw_vol = dw_total_length * dw_width_m * dw_depth
             dw_conc = dw_vol * (1 + loss_rate / 100)
             dw_area = dw_total_length * dw_depth
 
-            # 3. 單元數與工期
-            # 使用 math.ceil 確保無條件進位
+            # 4. 單元數與工期
             total_units = math.ceil(dw_total_length / unit_std_len)
             total_days = (total_units * days_per_unit) / machine_sets
 
             # --- 顯示結果 ---
-            st.subheader("📊 規劃結果概覽")
             
-            st.caption(f"計算基礎：厚度 {dw_width_cm} cm (即 {dw_width_m} m) | 單元標準長 {unit_std_len} m")
+            # 新增：幾何尺寸顯示區塊
+            st.subheader("📏 幾何尺寸換算")
+            st.info(f"依據中心線長度 **{dw_total_length}m** 與 **{corners}** 個轉角計算：")
+            
+            g1, g2, g3 = st.columns(3)
+            g1.metric("外皮線長度", f"{len_outer:.2f} m", help="用於外側導溝或外側模板計算")
+            g2.metric("中心線長度", f"{dw_total_length:.2f} m", "基準輸入")
+            g3.metric("內皮線長度", f"{len_inner:.2f} m", help="用於開挖面或內側模板計算")
+
+            st.markdown("---")
 
             # 第一排：工程數量
+            st.subheader("📊 規劃結果概覽")
+            st.caption(f"計算基礎：厚度 {dw_width_cm} cm | 單元標準長 {unit_std_len} m")
+
             st.markdown("##### 📦 工程數量")
             m1, m2, m3 = st.columns(3)
             m1.metric("總挖掘土方", f"{dw_vol:,.0f} m³")
             m2.metric("預估混凝土", f"{dw_conc:,.0f} m³", f"{loss_rate}% 損耗")
-            m3.metric("總壁體面積", f"{dw_area:,.0f} m²")
+            m3.metric("總壁體面積", f"{dw_area:,.0f} m²", help="垂直投影面積 (中心線 * 深度)")
 
             st.markdown("---")
             
             # 第二排：排程與單元
             st.markdown("##### 🗓️ 進度排程")
             t1, t2, t3 = st.columns(3)
-            t1.metric("預計總單元數", f"{total_units} 單元", help=f"總長度 / {unit_std_len}m (無條件進位)")
+            t1.metric("預計總單元數", f"{total_units} 單元")
             t2.metric("預估施作工期", f"{total_days:.1f} 天", help=f"配置 {machine_sets} 組機具")
             t3.metric("平均每日進度", f"{total_units/total_days:.2f} 單元/天")
 
