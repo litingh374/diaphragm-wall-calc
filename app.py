@@ -135,7 +135,6 @@ with tab2:
     
     with col_base1:
         site_area = st.number_input("基地/開挖平面面積 (m²)", min_value=0.0, value=1000.0, step=100.0)
-        # 坪數換算
         area_ping = site_area * 0.3025
         st.caption(f"換算坪數：約 **{area_ping:,.1f} 坪**")
         
@@ -150,44 +149,39 @@ with tab2:
     col_left, col_right = st.columns([1, 1])
 
     # ----------------------------------------------------
-    # 區塊 A: 沉沙池 (輸入長寬 -> 反推深度)
+    # 區塊 A: 沉沙池
     # ----------------------------------------------------
     with col_left:
         with st.expander("A. 沉沙池規格計算", expanded=True):
-            st.caption("依據「法規係數」與「設定尺寸」反推深度")
+            st.caption("依據「法規係數」反推深度")
             
-            # 法規與座數
             req_factor = st.number_input("法規係數 (m³/ha)", min_value=0.0, value=600.0, step=50.0)
+            
+            # 沉沙池座數
             pool_count = st.number_input("預計設置座數 (座)", min_value=1, value=2, step=1)
             
             st.markdown("##### 單池尺寸設定")
-            # 這裡改回 number_input，且預設值為 6x5
             c_pl, c_pw = st.columns(2)
             pool_l = c_pl.number_input("沉沙池長 (m)", min_value=1.0, value=6.0, step=0.5, key="pool_l")
             pool_w = c_pw.number_input("沉沙池寬 (m)", min_value=1.0, value=5.0, step=0.5, key="pool_w")
             
             # 計算
-            # 1. 總需求量
             total_req_sed_vol = (site_area / 10000.0) * req_factor
             
-            # 2. 總提供面積
             single_pool_area = pool_l * pool_w
             total_pool_area = pool_count * single_pool_area
             
-            # 3. 反推深度 = 總需求量 / 總面積
             if total_pool_area > 0:
                 required_depth = total_req_sed_vol / total_pool_area
             else:
                 required_depth = 0
             
             st.markdown("---")
-            # 結果顯示
             st.subheader("📊 計算結果：所需深度")
             
             c_p1, c_p2 = st.columns(2)
             c_p1.metric("法規要求總量", f"{total_req_sed_vol:,.2f} m³")
             
-            # 依據深度給予顏色警示
             depth_label = f"{required_depth:.2f} m"
             if required_depth > 3.0:
                 c_p2.metric("單池所需深度", depth_label, "深度過深，建議調整", delta_color="inverse")
@@ -201,7 +195,7 @@ with tab2:
             """)
 
     # ----------------------------------------------------
-    # 區塊 B: 棄土坑 (輸入長寬 -> 反推深度)
+    # 區塊 B: 棄土坑 (新增 座數 欄位)
     # ----------------------------------------------------
     with col_right:
         with st.expander("B. 棄土坑規格計算", expanded=True):
@@ -211,25 +205,31 @@ with tab2:
             swell_factor = st.number_input("土方鬆弛係數", min_value=1.0, value=1.25, step=0.05)
             
             st.markdown("##### 運能與尺寸")
-            # 運能
             truck_vol = st.number_input("運土車斗容量 (m³/車)", value=10.0)
             max_trips = st.number_input("每日最大車次 (車/天)", value=15)
             
+            st.markdown("---")
+            
+            # 新增：棄土坑座數
+            pit_count = st.number_input("預計設置座數 (座)", min_value=1, value=1, step=1, key="pit_count", help="若設置多座棄土坑分散暫存土方")
+            
             # 尺寸輸入 (預設 6x5)
             c_sl, c_sw = st.columns(2)
-            pit_l = c_sl.number_input("棄土坑長 (m)", min_value=1.0, value=6.0, step=0.5, key="pit_l")
-            pit_w = c_sw.number_input("棄土坑寬 (m)", min_value=1.0, value=5.0, step=0.5, key="pit_w")
+            pit_l = c_sl.number_input("單坑長度 (m)", min_value=1.0, value=6.0, step=0.5, key="pit_l")
+            pit_w = c_sw.number_input("單坑寬度 (m)", min_value=1.0, value=5.0, step=0.5, key="pit_w")
             
             # 計算邏輯
             daily_loose_vol = daily_solid_vol * swell_factor
             daily_haul_cap = truck_vol * max_trips
             buffer_needed = daily_loose_vol - daily_haul_cap
             
-            # 反推深度
-            pit_area = pit_l * pit_w
-            pit_depth_needed = buffer_needed / pit_area if (buffer_needed > 0 and pit_area > 0) else 0
+            # 反推深度 (考慮座數)
+            single_pit_area = pit_l * pit_w
+            total_pit_area = single_pit_area * pit_count
             
-            # 開挖工期
+            # 避免除以零
+            pit_depth_needed = buffer_needed / total_pit_area if (buffer_needed > 0 and total_pit_area > 0) else 0
+            
             excavation_days = math.ceil(total_exc_vol / daily_solid_vol) if daily_solid_vol > 0 else 0
             
             st.markdown("---")
@@ -238,12 +238,14 @@ with tab2:
             
             if pit_depth_needed > 0:
                 depth_str = f"{pit_depth_needed:.2f} m"
+                
+                # 判斷深度是否合理
                 if pit_depth_needed > 2.5:
-                    c_r2.metric("坑體所需深度", depth_str, "深度過深，建議調整", delta_color="inverse")
-                    st.error(f"⚠️ **{pit_l}m x {pit_w}m** 坑體深度需達 **{depth_str}** 才能容納。")
+                    c_r2.metric("單坑所需深度", depth_str, "深度過深，建議增設座數", delta_color="inverse")
+                    st.error(f"⚠️ 設置 {pit_count} 座 {pit_l}x{pit_w} 坑體，單坑深需達 **{depth_str}**。")
                 else:
-                    c_r2.metric("坑體所需深度", depth_str, "深度可接受")
-                    st.success(f"✅ **{pit_l}m x {pit_w}m** 坑體深度 **{depth_str}** 即可滿足。")
+                    c_r2.metric("單坑所需深度", depth_str, "深度可接受")
+                    st.success(f"✅ 設置 {pit_count} 座 {pit_l}x{pit_w} 坑體，單坑深 **{depth_str}** 即可。")
             else:
                 c_r2.metric("坑體所需深度", "0.00 m", "運能充足")
                 st.success("✅ 運能大於產出，無需挖掘深坑暫存。")
